@@ -58,6 +58,30 @@ and rotation model carries over exactly.
   jingles and a 3-station radio. The game makes zero network requests
   and plays fully offline.
 
+## Side activities (round 3)
+
+Two new free-roam systems live in `game/src/activities.js`, written for
+this round:
+
+- **Ledger Pages** — 30 pages from Sal Prumo's ledger are scattered
+  across Solmaris: some hand-placed at landmarks, alleys and awnings,
+  the rest dropped along the kerbs by a seeded scatter. A page glows
+  gold, bobs and spins, and pings on the minimap when you are close.
+  Walk or drive through one to collect it: +$25 a page, a +$500 bonus
+  at 15 pages, and +$1,500 with a "LEDGER COMPLETE" banner at all 30.
+  The counter sits under the weapon box, and collected pages persist
+  in the usual `solmaris-save-v2` save.
+- **Taxi fares** — while you are driving, a passenger flags you down
+  at a kerb (cyan ring, and a panel naming them). Stop close and press
+  **T** to pick them up: you get a named destination across town (pink
+  marker), a countdown, and a fare of base + distance shown live on
+  the taxi panel. Arrive in time for the fare plus a tip that grows
+  with the time left and shrinks with every dent; run out of time, or
+  leave the car for more than a few seconds, and the fare walks.
+  Pressing **T** in a car with no fare waiting puts the word out and
+  hurries the next one. Fares completed and lifetime taxi earnings
+  persist in the save and appear in the pause-menu stats.
+
 ## Run it
 
 Requires Node.js 22+ and a desktop browser.
@@ -67,6 +91,7 @@ node serve.ts            # serves game/ at http://127.0.0.1:8080
 ```
 
 Then open http://127.0.0.1:8080 in Chrome. WASD to move, E to enter cars,
+T to pick up a taxi fare,
 F to punch, click/Space to shoot (once armed), P or Esc to pause.
 
 To build the submission dossier instead:
@@ -79,7 +104,7 @@ MAKEFUN_OUTPUT_DIR=out node main.ts
 
 - `game/index.html` — page shell, HUD and menus
 - `game/src/` — the game's own modules (state, world, vehicles, peds,
-  police, player, missions, hud, audio, nico, particles, main)
+  police, player, missions, hud, audio, nico, particles, activities, main)
 - `game/vendor/babylon.min.js` — Babylon.js, vendored as a minified library
 - `screenshots/` — real renders of the game at 1280×720
 - `main.ts` — copies the game and screenshots to the output dir and writes

@@ -57,6 +57,15 @@ export const G = {
   campaignDone: false,
   stashesFound: 0,
   stashTaken: [],               // indices into the hidden-stash list
+  // --- round 3 side activities (activities.js): ledger pages + taxi
+  ledgerPages: [],              // ids of Ledger Pages already collected
+  ledgerBonusMid: false,        // halfway (15 pages) bonus already paid
+  ledgerBonusFull: false,       // full-set (30 pages) bonus already paid
+  faresDone: 0,                 // taxi fares completed (activities.js)
+  taxiEarned: 0,                // lifetime taxi earnings, fares + tips
+  taxiTips: 0,                  // lifetime tips alone
+  taxiFails: 0,                 // fares that timed out or were abandoned
+  taxiBestFare: 0,              // best single fare + tip ever paid
   totalEarned: 0,
   timesBusted: 0,
   timesWasted: 0,
@@ -203,6 +212,10 @@ export function saveGame() {
       resprayDiscount: G.resprayDiscount, stashesFound: G.stashesFound,
       stashTaken: G.stashTaken, totalEarned: G.totalEarned,
       timesBusted: G.timesBusted, timesWasted: G.timesWasted,
+      ledgerPages: G.ledgerPages, ledgerBonusMid: G.ledgerBonusMid,
+      ledgerBonusFull: G.ledgerBonusFull, faresDone: G.faresDone,
+      taxiEarned: G.taxiEarned, taxiTips: G.taxiTips,
+      taxiFails: G.taxiFails, taxiBestFare: G.taxiBestFare,
     }));
   } catch (e) { /* storage may be unavailable; the game still runs */ }
 }
@@ -235,6 +248,18 @@ export function loadGame() {
     G.totalEarned = s.totalEarned ?? 0;
     G.timesBusted = s.timesBusted ?? 0;
     G.timesWasted = s.timesWasted ?? 0;
+    // round 3 activities: a save written before these fields existed
+    // loads with an untouched ledger and no taxi history at all
+    G.ledgerPages = Array.isArray(s.ledgerPages)
+      ? s.ledgerPages.filter((n) => Number.isInteger(n) && n >= 0 && n < 30)
+      : [];
+    G.ledgerBonusMid = !!s.ledgerBonusMid;
+    G.ledgerBonusFull = !!s.ledgerBonusFull;
+    G.faresDone = s.faresDone ?? 0;
+    G.taxiEarned = s.taxiEarned ?? 0;
+    G.taxiTips = s.taxiTips ?? 0;
+    G.taxiFails = s.taxiFails ?? 0;
+    G.taxiBestFare = s.taxiBestFare ?? 0;
     return true;
   } catch (e) { return false; }
 }

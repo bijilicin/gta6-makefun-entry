@@ -24,6 +24,7 @@ import { MissionSystem } from './missions.js';
 import { Hud } from './hud.js';
 import { SoundFX, STATIONS } from './audio.js';
 import { ParticleSystem } from './particles.js';
+import { Activities } from './activities.js';
 
 const params = new URLSearchParams(window.location.search);
 const shotName = params.get('shot');
@@ -110,6 +111,10 @@ const missions = new MissionSystem(scene);
 const hud = new Hud();
 const fx = new SoundFX();
 const particles = new ParticleSystem(scene);
+// Round 3 side activities (Ledger Pages + taxi fares): built after the
+// world, traffic and cast exist, and driven from the frame loop below.
+const activities = new Activities(scene, hud, fx);
+window.__activities = activities;
 
 // ---------------- player headlight (lighting adaptation) ----------------
 // One wide SpotLight (created above, right after the world), re-aimed
@@ -135,7 +140,7 @@ function updateHeadlight() {
 // same way ?shot= staging moves the game. It changes nothing in play.
 window.__lighting = {
   pool: world.lightPool, lampHeads: world.lampHeads, headlight,
-  lampScale, G, player, world, scene, cars: allCars, police, missions,
+  lampScale, G, player, world, scene, cars: allCars, police, missions, activities,
   saveGame, loadGame, peds,
   setClockMinutes(mins) { G.clockMinutes = mins; },
 };
@@ -187,6 +192,7 @@ window.addEventListener('keydown', (e) => {
     if (player.tryReload()) hud.toast('RELOADING…', 0.9);
     else if (G.ammoMag < G.magSize && G.ammoReserve <= 0) hud.toast('NO AMMO — loot drops (+12) or buy at the PAWN shop (24 for $50)', 2.6);
   }
+  if (e.code === 'KeyT' && G.running && !G.paused && !hud.fullMapOpen) activities.handleTKey(player);
   if (e.code === 'KeyM' && G.running && !G.over) { toggleMap(); return; }
   if ((e.code === 'KeyP' || e.code === 'Escape') && G.running) {
     if (hud.fullMapOpen) { toggleMap(false); return; }
@@ -401,8 +407,10 @@ function startGame(fresh) {
     G.campaignDone = false; G.stashesFound = 0; G.stashTaken = [];
     G.totalEarned = 0; G.timesBusted = 0; G.timesWasted = 0; G.carsStolen = 0; G.resprayCount = 0;
     missions.resetCampaign();
+    activities.resetAll();
   } else {
     missions.restoreStashes();
+    activities.restoreFromSave();
   }
   G.running = true; G.paused = false; G.over = false;
   G.mode = 'foot';
@@ -426,12 +434,13 @@ function togglePause() {
   if (G.paused) {
     if (document.pointerLockElement) document.exitPointerLock();
     document.getElementById('pausestats').textContent =
-      `Cash $${G.money} · Jobs done ${G.missionIndex}/10 · Cars stolen ${G.carsStolen} · Shots fired ${G.shotsFired} · Resprays ${G.resprayCount} · Stashes ${G.stashesFound}/10 · Busted ${G.timesBusted} · Wasted ${G.timesWasted}`;
+      `Cash $${G.money} · Jobs done ${G.missionIndex}/10 · Cars stolen ${G.carsStolen} · Shots fired ${G.shotsFired} · Resprays ${G.resprayCount} · Stashes ${G.stashesFound}/10 · Ledger pages ${activities.collectedCount()}/30 · Taxi fares ${G.faresDone} (${'$' + (G.taxiEarned || 0)}) · Busted ${G.timesBusted} · Wasted ${G.timesWasted}`;
     showScreen('pause');
   } else showScreen(null);
 }
 function endRun(kind) {
   G.over = true;
+  activities.cancelActiveFare();
   police.clearAll();
   G.wanted = 0;
   G.wantedState = 'clear';
@@ -820,6 +829,10 @@ function frame(now) {
     if (ev.type === 'endcard') hud.endCard(ev.html);
   }
 
+  // round 3 side activities: pages spin and get pocketed, fares spawn,
+  // board, ride and pay out — never while a story job is active
+  activities.update(dt, player, { canOffer: !missions.active });
+
   // finale sunset: the light itself plays the last stage
   {
     const target = missions.sunsetActive() ? 1 : 0;
@@ -851,7 +864,8 @@ function frame(now) {
   } else if (player.car) {
     const nearBay = dist2d(player.car.x, player.car.z, LANDMARKS.respray.x, LANDMARKS.respray.z) < 7;
     const noAmmoCar = G.hasGun && G.reloading <= 0 && G.ammoMag <= 0 && G.ammoReserve <= 0;
-    hud.prompt(nearBay && (G.wanted > 0 || player.car.health < 99) ? `Stop in the bay — <b>Rico's Respray</b> ($${G.resprayDiscount ? 50 : 100})` : 'Press <b>E</b> to get out · <b>R</b> radio · <b>Shift</b> handbrake' + (noAmmoCar ? ' · <b>NO AMMO</b> — PAWN shop sells 24 for $50' : ''));
+    const farePrompt = activities.pickupPromptHtml(player);
+    hud.prompt(farePrompt ? farePrompt : nearBay && (G.wanted > 0 || player.car.health < 99) ? `Stop in the bay — <b>Rico's Respray</b> ($${G.resprayDiscount ? 50 : 100})` : 'Press <b>E</b> to get out · <b>R</b> radio · <b>Shift</b> handbrake' + (noAmmoCar ? ' · <b>NO AMMO</b> — PAWN shop sells 24 for $50' : ''));
   } else if (player.boat) {
     hud.prompt(dist2d(player.boat.x, player.boat.z, 31, 256) < 11 ? 'Press <b>E</b> to dock at the pier' : 'Herrera\'s boat — <b>E</b> docks at the pier');
   } else hud.prompt('');
@@ -861,6 +875,7 @@ function frame(now) {
   const sirenLevel = G.wanted > 0 && policeInfo.nearest < 70 ? 1 - policeInfo.nearest / 90 : 0;
   fx.update(dt, player.car ? player.car.speed / player.car.maxSpeed : 0, !!player.car, sirenLevel);
   hud.update(dt, missions.hudState(), player, allCars, peds, police.units, target, targetKind);
+  activities.drawMinimapBlips(player, hud);
   updateCamera(dt);
   renderFrame();
 }
@@ -984,7 +999,9 @@ if (shotName) {
     world.update(0.016, { x: player.x, z: player.z });
     updateHeadlight();
     missions.update(0.001, player, null, []);
+    activities.update(0.016, player, { canOffer: false });
     hud.update(0.016, missions.hudState(), player, allCars, peds, police.units, missions.active ? missions.stageTarget() : LANDMARKS.cafe);
+    activities.drawMinimapBlips(player, hud);
     renderFrame();
     if (frames < 14) requestAnimationFrame(settle);
     else window.__shotReady = true;
