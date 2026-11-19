@@ -25,6 +25,7 @@ import { Hud } from './hud.js';
 import { SoundFX, STATIONS } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import { Activities } from './activities.js';
+import { Races } from './races.js';
 
 const params = new URLSearchParams(window.location.search);
 const shotName = params.get('shot');
@@ -115,6 +116,10 @@ const particles = new ParticleSystem(scene);
 // world, traffic and cast exist, and driven from the frame loop below.
 const activities = new Activities(scene, hud, fx);
 window.__activities = activities;
+// Round 4 street races (Harbor Sprint & friends): built after the
+// world, traffic and cast exist, driven from the frame loop below.
+const races = new Races(scene, hud, fx);
+window.__races = races;
 
 // ---------------- player headlight (lighting adaptation) ----------------
 // One wide SpotLight (created above, right after the world), re-aimed
@@ -140,7 +145,7 @@ function updateHeadlight() {
 // same way ?shot= staging moves the game. It changes nothing in play.
 window.__lighting = {
   pool: world.lightPool, lampHeads: world.lampHeads, headlight,
-  lampScale, G, player, world, scene, cars: allCars, police, missions, activities,
+  lampScale, G, player, world, scene, cars: allCars, police, missions, activities, races,
   saveGame, loadGame, peds,
   setClockMinutes(mins) { G.clockMinutes = mins; },
 };
@@ -193,6 +198,7 @@ window.addEventListener('keydown', (e) => {
     else if (G.ammoMag < G.magSize && G.ammoReserve <= 0) hud.toast('NO AMMO — loot drops (+12) or buy at the PAWN shop (24 for $50)', 2.6);
   }
   if (e.code === 'KeyT' && G.running && !G.paused && !hud.fullMapOpen) activities.handleTKey(player);
+  if (e.code === 'KeyG' && G.running && !G.paused && !hud.fullMapOpen) races.handleGKey(player);
   if (e.code === 'KeyM' && G.running && !G.over) { toggleMap(); return; }
   if ((e.code === 'KeyP' || e.code === 'Escape') && G.running) {
     if (hud.fullMapOpen) { toggleMap(false); return; }
@@ -408,9 +414,11 @@ function startGame(fresh) {
     G.totalEarned = 0; G.timesBusted = 0; G.timesWasted = 0; G.carsStolen = 0; G.resprayCount = 0;
     missions.resetCampaign();
     activities.resetAll();
+    races.resetAll();
   } else {
     missions.restoreStashes();
     activities.restoreFromSave();
+    races.restoreFromSave();
   }
   G.running = true; G.paused = false; G.over = false;
   G.mode = 'foot';
@@ -434,13 +442,14 @@ function togglePause() {
   if (G.paused) {
     if (document.pointerLockElement) document.exitPointerLock();
     document.getElementById('pausestats').textContent =
-      `Cash $${G.money} · Jobs done ${G.missionIndex}/10 · Cars stolen ${G.carsStolen} · Shots fired ${G.shotsFired} · Resprays ${G.resprayCount} · Stashes ${G.stashesFound}/10 · Ledger pages ${activities.collectedCount()}/30 · Taxi fares ${G.faresDone} (${'$' + (G.taxiEarned || 0)}) · Busted ${G.timesBusted} · Wasted ${G.timesWasted}`;
+      `Cash $${G.money} · Jobs done ${G.missionIndex}/10 · Cars stolen ${G.carsStolen} · Shots fired ${G.shotsFired} · Resprays ${G.resprayCount} · Stashes ${G.stashesFound}/10 · Ledger pages ${activities.collectedCount()}/30 · Taxi fares ${G.faresDone} (${'$' + (G.taxiEarned || 0)}) · Races ${G.racesDone || 0} (${G.racesWon || 0} wins, ${'$' + (G.raceEarnings || 0)}) · Busted ${G.timesBusted} · Wasted ${G.timesWasted}`;
     showScreen('pause');
   } else showScreen(null);
 }
 function endRun(kind) {
   G.over = true;
   activities.cancelActiveFare();
+  races.cancelActiveRace();
   police.clearAll();
   G.wanted = 0;
   G.wantedState = 'clear';
@@ -833,6 +842,10 @@ function frame(now) {
   // board, ride and pay out — never while a story job is active
   activities.update(dt, player, { canOffer: !missions.active });
 
+  // round 4 street races: markers idle, rivals run their rings, the
+  // race clock and fail states advance — grids only form in free roam
+  races.update(dt, player, { canOffer: !missions.active });
+
   // finale sunset: the light itself plays the last stage
   {
     const target = missions.sunsetActive() ? 1 : 0;
@@ -851,12 +864,13 @@ function frame(now) {
   world.update(dt, { x: player.x, z: player.z });
   updateHeadlight();
 
+  const racePrompt = races.promptHtml(player);
   if (!player.car && !player.boat && G.running) {
     const v = player.nearestCar(allCars, 4.2);
     const nearBoat = G.boatUnlocked && dist2d(player.x, player.z, boat.x, boat.z) < 6.5;
     const nearPawn = dist2d(player.x, player.z, LANDMARKS.pawn.x, LANDMARKS.pawn.z) < 5;
     const noAmmo = G.hasGun && G.reloading <= 0 && G.ammoMag <= 0 && G.ammoReserve <= 0;
-    hud.prompt(nearPawn ? (G.hasGun ? 'Press <b>E</b> · Buy ammo 24 — $50' + (G.money < 50 ? ' · <b>not enough cash</b>' : '') : 'PAWN SHOP — ammo counter (win a pistol first)')
+    hud.prompt(racePrompt ? racePrompt : nearPawn ? (G.hasGun ? 'Press <b>E</b> · Buy ammo 24 — $50' + (G.money < 50 ? ' · <b>not enough cash</b>' : '') : 'PAWN SHOP — ammo counter (win a pistol first)')
       : v ? 'Press <b>E</b> to ' + (v.parked ? 'steal this car' : 'jack this car')
       : nearBoat ? 'Press <b>E</b> to take Herrera\'s boat'
       : noAmmo ? '<b>NO AMMO</b> — loot +12 from downed police / peds, or buy 24 for $50 at the <b>PAWN shop</b>'
@@ -865,7 +879,7 @@ function frame(now) {
     const nearBay = dist2d(player.car.x, player.car.z, LANDMARKS.respray.x, LANDMARKS.respray.z) < 7;
     const noAmmoCar = G.hasGun && G.reloading <= 0 && G.ammoMag <= 0 && G.ammoReserve <= 0;
     const farePrompt = activities.pickupPromptHtml(player);
-    hud.prompt(farePrompt ? farePrompt : nearBay && (G.wanted > 0 || player.car.health < 99) ? `Stop in the bay — <b>Rico's Respray</b> ($${G.resprayDiscount ? 50 : 100})` : 'Press <b>E</b> to get out · <b>R</b> radio · <b>Shift</b> handbrake' + (noAmmoCar ? ' · <b>NO AMMO</b> — PAWN shop sells 24 for $50' : ''));
+    hud.prompt(racePrompt ? racePrompt : farePrompt ? farePrompt : nearBay && (G.wanted > 0 || player.car.health < 99) ? `Stop in the bay — <b>Rico's Respray</b> ($${G.resprayDiscount ? 50 : 100})` : 'Press <b>E</b> to get out · <b>R</b> radio · <b>Shift</b> handbrake' + (noAmmoCar ? ' · <b>NO AMMO</b> — PAWN shop sells 24 for $50' : ''));
   } else if (player.boat) {
     hud.prompt(dist2d(player.boat.x, player.boat.z, 31, 256) < 11 ? 'Press <b>E</b> to dock at the pier' : 'Herrera\'s boat — <b>E</b> docks at the pier');
   } else hud.prompt('');
@@ -876,6 +890,7 @@ function frame(now) {
   fx.update(dt, player.car ? player.car.speed / player.car.maxSpeed : 0, !!player.car, sirenLevel);
   hud.update(dt, missions.hudState(), player, allCars, peds, police.units, target, targetKind);
   activities.drawMinimapBlips(player, hud);
+  races.drawMinimapBlips(player, hud);
   updateCamera(dt);
   renderFrame();
 }
@@ -899,11 +914,17 @@ function stageShot(name) {
   }
   if (name === 'foot') {
     G.money = 310; G.displayedMoney = 310; G.hasGun = true; G.ammoMag = G.magSize; G.ammoReserve = 48; G.reloading = 0;
-    player.placeAt(-40, -8, Math.PI);
+    // Rina stands in the cafe alley with a Ledger Page glowing ahead
+    // of her (6 m out — beyond its 2.7 m pickup radius, so the
+    // staged scene holds) and neighbours on the pavement around her
+    player.placeAt(-44, -21, Math.PI);
+    if (peds[0]) { peds[0].pos.set(-41.5, 0, -25.5); peds[0].heading = Math.PI; }
+    if (peds[1]) { peds[1].pos.set(-47, 0, -19.5); peds[1].heading = -Math.PI / 2; }
+    if (peds[2]) { peds[2].pos.set(-42, 0, -30.5); peds[2].heading = Math.PI / 2; }
     missions.startNext(fx);
     camYaw = Math.PI;
-    camera.position.set(-40, 4.2, 1.5);
-    camLookAt(player.x, 1.6, player.z - 6);
+    camera.position.set(-44, 3.6, -12.5);
+    camLookAt(-44, 1.3, -28);
     return;
   }
   if (name === 'drive') {
@@ -913,6 +934,22 @@ function stageShot(name) {
     car.mesh.rotation.y = Math.PI / 2;
     player.enterCar(car, null);
     car.speed = 14;
+    // traffic around her on the same avenue: one car ahead in her
+    // lane, one coming the other way, one behind — the cover shot
+    // is a living street, not an empty one
+    const trafficSpots = [
+      { v: trafficCars[0], x: -36, z: 43.8, h: Math.PI / 2, s: 12 },
+      { v: trafficCars[1], x: -30, z: 36.2, h: -Math.PI / 2, s: 11 },
+      { v: trafficCars[2], x: -79, z: 43.8, h: Math.PI / 2, s: 13 },
+    ];
+    for (const spot of trafficSpots) {
+      if (!spot.v) continue;
+      spot.v.pos.set(spot.x, 0, spot.z);
+      spot.v.heading = spot.h; spot.v.mesh.rotation.y = spot.h;
+      spot.v.speed = spot.s;
+      spot.v.axis = 'x'; spot.v.dir = spot.h > 0 ? 1 : -1;
+      spot.v.laneCoord = 40;
+    }
     missions.startNext(fx);
     G.wanted = 0; G.crimeHeat = 0; G.wantedState = 'clear';
     camYaw = Math.PI / 2;
@@ -947,6 +984,48 @@ function stageShot(name) {
     camYaw = 0;
     camera.position.set(40.5, 2.2, -57.5);
     camLookAt(47.8, 1.0, -43.5);
+    return;
+  }
+  if (name === 'race') {
+    // An active Harbor Sprint on its northern avenue leg: five rings
+    // banked, clock at 47.3 s, Rina running 2nd with the next orange
+    // ring 40 m ahead and a rival in each mirror — race panel live.
+    G.money = 900; G.displayedMoney = 900; G.hasGun = true; G.ammoMag = G.magSize; G.ammoReserve = 48; G.reloading = 0;
+    const def = races.defsById['harbor-sprint'];
+    const car = parkedCars[3] || allCars[0];
+    car.pos.set(0, 0, 123.8); car.heading = Math.PI / 2;
+    car.mesh.rotation.y = Math.PI / 2;
+    player.enterCar(car, null);
+    car.speed = 13;
+    races.startRace(player, def, { free: true, skipCountdown: true });
+    const race = races.race;
+    race.checkpointIndex = 5;
+    races.placeCheckpoint(def.checkpoints[5]);
+    race.elapsed = 47.3;
+    race.timeLeft = def.timeoutSec - race.elapsed;
+    race.gapMetres = dist2d(player.x, player.z, def.checkpoints[5].x, def.checkpoints[5].z);
+    const rivalSpots = [
+      { x: 24, z: 123.8, s: 15, ci: 5 },
+      { x: -14, z: 116.2, s: 12, ci: 5 },
+      { x: -26, z: 123.8, s: 11, ci: 4 },
+    ];
+    race.rivals.forEach((rival, i) => {
+      const spot = rivalSpots[i];
+      if (!spot) return;
+      rival.car.pos.set(spot.x, 0, spot.z);
+      rival.car.heading = Math.PI / 2;
+      rival.car.mesh.rotation.y = Math.PI / 2;
+      rival.car.speed = spot.s;
+      rival.checkpointIndex = spot.ci;
+      rival.lastX = spot.x; rival.lastZ = spot.z;
+    });
+    race.position = races.computePosition(player);
+    races.renderPanel(player);
+    hud.toastTimer = 0;
+    if (hud.el.toast) hud.el.toast.style.opacity = 0;
+    camYaw = Math.PI / 2;
+    camera.position.set(-12.5, 3.2, 123.8);
+    camLookAt(16, 1.2, 121.5);
     return;
   }
   // chase: wanted 3, PD on her tail with lightbars flashing, mission live
@@ -1000,8 +1079,10 @@ if (shotName) {
     updateHeadlight();
     missions.update(0.001, player, null, []);
     activities.update(0.016, player, { canOffer: false });
+    races.update(0.016, player, { canOffer: false });
     hud.update(0.016, missions.hudState(), player, allCars, peds, police.units, missions.active ? missions.stageTarget() : LANDMARKS.cafe);
     activities.drawMinimapBlips(player, hud);
+    races.drawMinimapBlips(player, hud);
     renderFrame();
     if (frames < 14) requestAnimationFrame(settle);
     else window.__shotReady = true;

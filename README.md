@@ -82,6 +82,37 @@ this round:
   hurries the next one. Fares completed and lifetime taxi earnings
   persist in the save and appear in the pause-menu stats.
 
+## Street races (round 4)
+
+A third free-roam system lives in `game/src/races.js`, written for
+this round: checkpoint street races under the Harbor Sprint banner.
+
+- **Three start markers** stand across the city — an orange ring, a
+  soft column and a floating flag icon: Harbor Sprint on the beach
+  road in the south-east, Downtown Dash around the central blocks,
+  and the Lighthouse Run from the south-east corner clear across
+  town. Drive into a ring in any car and press **G** to enter.
+- **Entry fees scale with route length** (measured leg by leg when
+  the courses are built): the longer the course, the dearer the
+  grid and the richer the purse — 1st pays four times the fee, 2nd
+  doubles it, 3rd refunds it, 4th pays nothing.
+- **Three rival drivers** in ordinary street cars run the same
+  checkpoint route: Vex Marlowe, Sana Iqbal and Bruno Fenn, each
+  with their own pace and line, including honest recovery when one
+  of them wedges a corner.
+- **Checkpoints** are large glowing orange rings shown one at a
+  time, with a skyline column, a next-ring blip and the rivals
+  charted on the minimap. A dedicated race panel shows your live
+  position (1st–4th), checkpoint x of y, the elapsed clock with
+  tenths, and the gap in metres to the next ring, plus the time
+  limit and the car you are chasing.
+- **Fail states** end a race cleanly with no refund: out of time,
+  your car wrecked, or out of the car for more than six seconds.
+  Finished races bank wins, finishes and lifetime prize earnings,
+  and your **best time per course persists** in the usual
+  `solmaris-save-v2` save (older saves load with an empty racing
+  record). Each grid reopens after a short cooldown.
+
 ## Run it
 
 Requires Node.js 22+ and a desktop browser.
@@ -91,7 +122,7 @@ node serve.ts            # serves game/ at http://127.0.0.1:8080
 ```
 
 Then open http://127.0.0.1:8080 in Chrome. WASD to move, E to enter cars,
-T to pick up a taxi fare,
+T to pick up a taxi fare, G to enter a street race at an orange ring,
 F to punch, click/Space to shoot (once armed), P or Esc to pause.
 
 To build the submission dossier instead:
@@ -104,7 +135,7 @@ MAKEFUN_OUTPUT_DIR=out node main.ts
 
 - `game/index.html` — page shell, HUD and menus
 - `game/src/` — the game's own modules (state, world, vehicles, peds,
-  police, player, missions, hud, audio, nico, particles, activities, main)
+  police, player, missions, hud, audio, nico, particles, activities, races, main)
 - `game/vendor/babylon.min.js` — Babylon.js, vendored as a minified library
 - `screenshots/` — real renders of the game at 1280×720
 - `main.ts` — copies the game and screenshots to the output dir and writes

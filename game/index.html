@@ -73,6 +73,10 @@
   #taxititle { font-size: 15px; font-weight: 900; letter-spacing: 1.5px; color: #5ef2ff; }
   #taxiline { font-size: 16.5px; font-weight: 700; margin-top: 2px; }
   #taximeta { font-size: 13px; opacity: .92; margin-top: 2px; color: #ffe9a8; }
+  #racepanel { position: absolute; bottom: 214px; left: 50%; transform: translateX(-50%); min-width: 320px; max-width: 520px; text-align: center; background: rgba(8,12,20,.78); border: 1.5px solid rgba(255,140,26,.75); border-radius: 12px; padding: 9px 18px 10px; text-shadow: 0 1px 4px #000; }
+  #racetitle { font-size: 15px; font-weight: 900; letter-spacing: 1.5px; color: #ffa02a; }
+  #raceline { font-size: 16.5px; font-weight: 700; margin-top: 2px; }
+  #racemeta { font-size: 13px; opacity: .92; margin-top: 2px; color: #ffe9a8; }
 
   /* ---------- Screens ---------- */
   .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
@@ -158,6 +162,11 @@
     <div id="taxiline"></div>
     <div id="taximeta"></div>
   </div>
+  <div id="racepanel" class="hidden">
+    <div id="racetitle">STREET RACE</div>
+    <div id="raceline"></div>
+    <div id="racemeta"></div>
+  </div>
   <div id="toast"></div>
   <div id="banner"><div id="bannertitle"></div><div id="bannersub"></div></div>
   <div id="radiotoast"></div>
@@ -196,6 +205,7 @@
     <b>MOUSE</b> camera — click the game to mouse-lock &nbsp;•&nbsp; <b>CLICK / F / SPACE</b> shoot — drive-by in a car, punch unarmed &nbsp;•&nbsp; <b>W+S</b> burnout<br>
     <b>R</b> / <b>[ ]</b> radio station &nbsp;•&nbsp; <b>M</b> city map &nbsp;•&nbsp; <b>N</b> mute &nbsp;•&nbsp; <b>P / ESC</b> pause<br>
     <b>T</b> taxi fare — stop at the cyan ring and press T, then beat the clock to the pink marker &nbsp;•&nbsp; Ledger Pages glow gold around the city (30 to find)<br>
+    <b>G</b> street race — drive to an orange start ring and press G to enter (fee per race, 3 rivals, best times kept)<br>
     Weapon box (top right): magazine / reserve — ammo is finite: <b>R</b> reloads on foot, downed cops &amp; armed peds drop +12, the PAWN shop sells 24 for $50 &nbsp;•&nbsp; Rico's Respray bay clears your heat
   </div>
 </div>
@@ -221,6 +231,7 @@
       <div class="row"><span class="chip" style="background:#ffd23e"></span> Hidden stash</div>
       <div class="row"><span class="chip" style="background:#ffe98a"></span> Ledger Page (nearby — minimap ping)</div>
       <div class="row"><span class="chip" style="background:#ff5ea8"></span> Taxi destination · <span style="background:#5ef2ff" class="chip"></span> waiting fare</div>
+      <div class="row"><span class="chip" style="background:#ff8c1a"></span> Street race — start ring · next checkpoint (minimap)</div>
       <div class="row"><span class="chip" style="background:#ffb02a"></span> Pawn Shop — ammo 24 for $50 (E)</div>
       <div class="row"><span class="chip" style="background:#7dd7ff"></span> Herrera's boat</div>
       <div class="row"><span class="chip" style="background:#c9ced6"></span> Traffic · <span style="color:#e8e4da">●</span> Pedestrians</div>
@@ -244,6 +255,7 @@
     <b>MOUSE</b> camera — click the game to mouse-lock &nbsp;•&nbsp; <b>CLICK / F / SPACE</b> shoot — drive-by in a car, punch unarmed<br>
     <b>R</b> / <b>[ ]</b> radio station &nbsp;•&nbsp; <b>M</b> city map &nbsp;•&nbsp; <b>N</b> mute &nbsp;•&nbsp; <b>P / ESC</b> pause<br>
     <b>T</b> taxi fare — pick up at the cyan ring, drop off at the pink marker before the clock runs out<br>
+    <b>G</b> street race — enter at an orange start ring, chase the orange checkpoints, beat 3 rivals<br>
     Weapon box (top right): magazine / reserve — ammo is finite: <b>R</b> reloads on foot, drops give +12, PAWN shop sells 24 for $50
   </div>
 </div>
@@ -259,6 +271,7 @@
 <p id="statusline" role="status" aria-live="polite"></p>
 <script src="./vendor/babylon.min.js"></script>
 <script type="module" src="./src/activities.js"></script>
+<script type="module" src="./src/races.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

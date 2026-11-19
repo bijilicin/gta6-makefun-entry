@@ -66,6 +66,11 @@ export const G = {
   taxiTips: 0,                  // lifetime tips alone
   taxiFails: 0,                 // fares that timed out or were abandoned
   taxiBestFare: 0,              // best single fare + tip ever paid
+  // --- round 4 street races (races.js): Harbor Sprint & friends
+  racesWon: 0,                  // street races finished 1st
+  racesDone: 0,                 // street races finished (any placing)
+  raceEarnings: 0,              // lifetime prize money from racing
+  raceBestTimes: {},            // race id -> best finish time, seconds
   totalEarned: 0,
   timesBusted: 0,
   timesWasted: 0,
@@ -216,6 +221,8 @@ export function saveGame() {
       ledgerBonusFull: G.ledgerBonusFull, faresDone: G.faresDone,
       taxiEarned: G.taxiEarned, taxiTips: G.taxiTips,
       taxiFails: G.taxiFails, taxiBestFare: G.taxiBestFare,
+      racesWon: G.racesWon, racesDone: G.racesDone,
+      raceEarnings: G.raceEarnings, raceBestTimes: G.raceBestTimes,
     }));
   } catch (e) { /* storage may be unavailable; the game still runs */ }
 }
@@ -260,6 +267,24 @@ export function loadGame() {
     G.taxiTips = s.taxiTips ?? 0;
     G.taxiFails = s.taxiFails ?? 0;
     G.taxiBestFare = s.taxiBestFare ?? 0;
+    // round 4 street races: a save written before these fields
+    // existed loads with an empty racing record — no wins, no
+    // finishes, no earnings, and no best time on any board. Best
+    // times are kept only when they are sane finish times keyed by
+    // a race id string, so a hand-edited or damaged save can never
+    // put a nonsense clock on the board.
+    G.racesWon = Math.max(0, Math.floor(s.racesWon) || 0);
+    G.racesDone = Math.max(0, Math.floor(s.racesDone) || 0);
+    G.raceEarnings = Math.max(0, Math.floor(s.raceEarnings) || 0);
+    G.raceBestTimes = {};
+    if (s.raceBestTimes && typeof s.raceBestTimes === 'object' && !Array.isArray(s.raceBestTimes)) {
+      for (const key of Object.keys(s.raceBestTimes)) {
+        const t = s.raceBestTimes[key];
+        if (typeof t === 'number' && Number.isFinite(t) && t > 5 && t < 3600) {
+          G.raceBestTimes[key] = t;
+        }
+      }
+    }
     return true;
   } catch (e) { return false; }
 }
