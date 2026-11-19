@@ -5,7 +5,7 @@
 // judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
 // Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
 // title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
+// your own open-world crime game in its place (Babylon.js or any library you vendor under game/),
 // put your 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
@@ -20,6 +20,14 @@ import { buildDossier } from './vendor/makefun-game.ts';
 // Solmaris Heat: an original open-world coastal crime game, hand-built for this entry.
 const ENTRY_TITLE = 'Solmaris Heat';
 void ENTRY_TITLE;
+
+// v3 engine rewrite: the whole game ported from three.js to Babylon.js
+// (vendored, offline) — equirect IBL + PBR materials + DefaultRendering
+// Pipeline (FXAA/bloom/grade/vignette/grain). Gameplay, story, missions
+// and the traffic brain (perception, IDM-lite following, junction yield,
+// anti-interpenetration push-out) are unchanged from v2.1.
+const ENTRY_BUILD = 'Solmaris Heat v3 — Babylon.js engine rewrite';
+void ENTRY_BUILD;
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';

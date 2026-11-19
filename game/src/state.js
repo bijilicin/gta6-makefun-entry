@@ -1,6 +1,9 @@
-// Shared game state for Solmaris Heat. Every system reads and writes the
+// Shared game state for Solmaris Heat v2. Every system reads and writes the
 // single G object so modules stay decoupled: world builds into it, player,
-// traffic, police and missions all act on it each frame.
+// traffic, police and missions all act on it each frame. The v2 wanted model
+// is information-based: police must SEE Rina (or a witness must report her)
+// for the heat to stay up; break line of sight and the stars start flashing
+// while a search zone closes around her last known position.
 
 export const WORLD = {
   half: 200,          // city spans -200..200 on both axes
@@ -17,21 +20,56 @@ export const G = {
   time: 0,
   clockMinutes: 17 * 60 + 42,   // golden hour, creeps forward slowly
   money: 60,
+  displayedMoney: 60,           // HUD cash count-up chases this toward money
   health: 100,
   maxHealth: 100,
+  armor: 0,
   wanted: 0,                    // 0..5 stars
-  crimeHeat: 0,                 // seconds since last crime (drives decay)
-  hideoutCalm: 0,               // time spent calm inside a hideout zone
+  wantedState: 'clear',         // clear | seen | searching
+  lastKnown: { x: -30, z: -30 },// where the PD last actually saw Rina
+  seenTimer: 0,                 // seconds since a unit last had eyes on her
+  searchTimer: 0,               // drains while searching; a star falls at zero
+  searchRadius: 46,             // minimap search-zone radius (world units)
+  crimeHeat: 0,                 // seconds since last crime
+  lastDamageAt: -99,            // G.time of the last hit taken (regen gate)
+  lastCrimeAt: -99,
+  filmingWitnesses: 0,          // peds currently filming Rina (set by peds.js)
+  hideoutCalm: 0,
   hasGun: false,
+  magSize: 12,                  // pistol magazine size (never changes)
+  ammoMag: 12,
+  ammoReserve: 0,               // finite reserve ammo: 0 until the pistol is won, then 48
+  reloading: 0,                 // seconds left on the current reload
+  dryClicks: 0,                 // trigger pulls on an empty gun with an empty reserve
   shotsFired: 0,
   carsStolen: 0,
-  missionIndex: 0,              // next story mission to offer
+  resprayCount: 0,              // Rico's Respray visits (mission + free use)
+  lastResprayAt: -99,
+  radioStation: 0,              // 0 off, 1..3 stations (audio.js owns names)
+  radioToastAt: -99,
+  trafficPhase: 0,              // traffic-light cycle clock (world.js lights)
+  missionIndex: 0,
   storyDone: false,
+  // --- campaign v2 (story addendum): duo partner, boat, activities, stats
+  partnerUnlocked: false,       // Nico Herrera rides along from mission 4
+  boatUnlocked: false,          // Herrera's motorboat, from mission 9
+  resprayDiscount: false,       // Rico's trade price after mission 4
+  campaignDone: false,
+  stashesFound: 0,
+  stashTaken: [],               // indices into the hidden-stash list
+  totalEarned: 0,
+  timesBusted: 0,
+  timesWasted: 0,
+  rivalCars: [],                // mission-spawned hostile cars (drive-by targets)
+  aiDriver: null,               // { car, route, i, done } — Nico at the wheel
+  sunsetFrac: 0,                // finale light shift, applied by main
+  playerBoat: null,             // the shared motorboat (set by main)
   mode: 'menu',                 // menu | foot | car | busted | wasted | won
   bustMeter: 0,
   damageFlash: 0,
+  cameraShake: 0,
   message: '',
-  shot: null,                   // screenshot staging name, if any
+  shot: null,
   seed: 7,
 };
 
@@ -53,7 +91,6 @@ export function angleLerp(a, b, t) {
   if (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
 }
-// Road lines sit at multiples of roadEvery inside the city.
 export function roadLines() {
   const lines = [];
   for (let c = -WORLD.half; c <= WORLD.half; c += WORLD.roadEvery) lines.push(c);
@@ -71,36 +108,136 @@ export function isOnRoad(x, z) {
   if (Math.abs(nearestRoadCoord(z) - z) < w && Math.abs(x) <= WORLD.half + 8) return true;
   return false;
 }
-export function commitCrime(amount, reason) {
-  // amount is in "heat points": 100 points = one star.
+// A GPS route along the street grid: from a point, snap to the nearest
+// vertical avenue, run along it to the target's nearest horizontal street,
+// then in to the target. Returned as waypoints for the minimap polyline.
+export function gpsRoute(fromX, fromZ, toX, toZ) {
+  const vx = nearestRoadCoord(fromX);
+  const hz = nearestRoadCoord(toZ);
+  return [
+    { x: fromX, z: fromZ },
+    { x: vx, z: fromZ },
+    { x: vx, z: hz },
+    { x: toX, z: hz },
+    { x: toX, z: toZ },
+  ];
+}
+// commitCrime(amount, reason, witnessed): witnessed crimes (a cop or a
+// filming ped had eyes on Rina) raise a full extra chunk of heat; a crime
+// nobody saw still counts, but less, and it does NOT refresh the PD's
+// last-known position — information, not magic.
+export function commitCrime(amount, reason, witnessed) {
   G.crimeHeat = 0;
+  G.lastCrimeAt = G.time;
+  const filming = G.filmingWitnesses > 0;
+  let pts = amount;
+  if (witnessed) pts *= 1.5;
+  if (filming && amount >= 30) pts += 25;      // caught on a phone camera
   const before = G.wanted;
-  const points = G.wanted * 100 + amount;
-  G.wanted = clamp(Math.ceil(points / 100), 0, 5);
+  const total = G.wanted * 100 + pts;
+  G.wanted = clamp(Math.ceil(total / 100), 0, 5);
+  if (G.wanted > 0 && witnessed) {
+    G.wantedState = 'seen';
+    G.seenTimer = 0;
+    G.searchTimer = searchDuration();
+  }
   if (reason && G.wanted > before) G.message = reason;
 }
+export function searchDuration() { return 5 + G.wanted * 3.2; }
+// Dusk/night lamp factor (lighting adaptation): how strongly Solmaris's
+// real street lights and vehicle headlights burn, derived purely from
+// the HUD clock (G.clockMinutes). 0 = full day (lamps and headlights
+// completely off), a partial plateau through the golden-hour dusk the
+// game starts in, 1 = full night. Dawn mirrors dusk. This only scales
+// light intensities and lamp emissives — it moves no sun, sky or fog,
+// and touches no gameplay, story or save state.
+export function lampScale() {
+  const h = (((G.clockMinutes % 1440) + 1440) % 1440) / 60;
+  if (h >= 6.5 && h < 16.5) return 0;                    // day
+  if (h >= 16.5 && h < 18) return 0.55 * (h - 16.5) / 1.5;   // dusk ramp -> partial
+  if (h >= 18 && h < 19) return 0.55 + 0.45 * (h - 18);      // dusk -> full night
+  if (h >= 19 || h < 5) return 1;                       // night
+  return 1 - (h - 5) / 1.5;                             // dawn ramp (05:00 -> 06:30)
+}
+// Called every frame by the police system with fresh sighting information.
+export function reportSighting(x, z, anySeeing) {
+  if (G.wanted === 0) { G.wantedState = 'clear'; return; }
+  if (anySeeing) {
+    G.lastKnown.x = x; G.lastKnown.z = z;
+    G.wantedState = 'seen';
+    G.seenTimer = 0;
+    G.searchTimer = searchDuration();
+  }
+}
+// Finite ammo economy: there is NO unlimited ammo anywhere for Rina's
+// pistol. A reload (auto at an empty magazine, or R on foot) takes
+// min(magSize - ammoMag, ammoReserve) rounds out of the finite reserve;
+// with the reserve at 0 no reload can start and the trigger only clicks.
+// Refills come from the world: +12 drops from downed police / armed peds,
+// and 24 rounds for $50 at the PAWN shop.
+export function startReload() {
+  if (!G.hasGun || G.reloading > 0) return false;
+  if (G.ammoMag >= G.magSize) return false;
+  if (G.ammoReserve <= 0) return false;
+  G.reloading = 0.9;            // reload time is unchanged: 0.9 s
+  return true;
+}
+export function finishReload() {
+  const need = G.magSize - G.ammoMag;
+  const take = Math.min(need, Math.max(0, G.ammoReserve));
+  G.ammoMag += take;
+  G.ammoReserve -= take;
+  G.reloading = 0;
+  return take;
+}
+// Save format v2 (story addendum): key versioned so v1 saves never clash.
+const SAVE_KEY = 'solmaris-save-v2';
 export function saveGame() {
   try {
-    localStorage.setItem('solmarisHeatSaveV1', JSON.stringify({
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
       money: G.money, health: G.health, missionIndex: G.missionIndex,
-      storyDone: G.storyDone, hasGun: G.hasGun, carsStolen: G.carsStolen,
+      storyDone: G.storyDone, campaignDone: G.campaignDone, hasGun: G.hasGun,
+      ammoReserve: G.ammoReserve,
+      carsStolen: G.carsStolen, resprayCount: G.resprayCount,
+      partnerUnlocked: G.partnerUnlocked, boatUnlocked: G.boatUnlocked,
+      resprayDiscount: G.resprayDiscount, stashesFound: G.stashesFound,
+      stashTaken: G.stashTaken, totalEarned: G.totalEarned,
+      timesBusted: G.timesBusted, timesWasted: G.timesWasted,
     }));
   } catch (e) { /* storage may be unavailable; the game still runs */ }
 }
 export function loadGame() {
   try {
-    const raw = localStorage.getItem('solmarisHeatSaveV1');
+    const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const s = JSON.parse(raw);
     G.money = s.money ?? G.money;
+    G.displayedMoney = G.money;
     G.health = clamp(s.health ?? 100, 10, 100);
     G.missionIndex = s.missionIndex ?? 0;
     G.storyDone = !!s.storyDone;
+    G.campaignDone = !!s.campaignDone;
     G.hasGun = !!s.hasGun;
+    G.ammoMag = G.magSize; G.reloading = 0;   // a loaded save starts with a full magazine
+    // finite reserve: a v2 save written before this field existed gets
+    // the sensible default — a full starting reserve if Rina already
+    // owns the pistol, nothing if she does not
+    G.ammoReserve = (s.ammoReserve === undefined || s.ammoReserve === null)
+      ? (G.hasGun ? 48 : 0)
+      : Math.max(0, Math.floor(s.ammoReserve) || 0);
     G.carsStolen = s.carsStolen ?? 0;
+    G.resprayCount = s.resprayCount ?? 0;
+    G.partnerUnlocked = !!s.partnerUnlocked;
+    G.boatUnlocked = !!s.boatUnlocked;
+    G.resprayDiscount = !!s.resprayDiscount;
+    G.stashesFound = s.stashesFound ?? 0;
+    G.stashTaken = Array.isArray(s.stashTaken) ? s.stashTaken : [];
+    G.totalEarned = s.totalEarned ?? 0;
+    G.timesBusted = s.timesBusted ?? 0;
+    G.timesWasted = s.timesWasted ?? 0;
     return true;
   } catch (e) { return false; }
 }
 export function hasSave() {
-  try { return !!localStorage.getItem('solmarisHeatSaveV1'); } catch (e) { return false; }
+  try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
 }
