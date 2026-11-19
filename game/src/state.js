@@ -71,6 +71,16 @@ export const G = {
   racesDone: 0,                 // street races finished (any placing)
   raceEarnings: 0,              // lifetime prize money from racing
   raceBestTimes: {},            // race id -> best finish time, seconds
+  // --- round 5 career profile (profile.js): lifetime counters that
+  // feed the career stats screen. Cash earned and times busted reuse
+  // the long-standing totalEarned / timesBusted fields below; these
+  // four are the ones earlier rounds never tracked. All four are
+  // advanced by profile.js from the live frame (car-entry edges,
+  // driven distance, wanted peaks, played time) — never by hand.
+  distanceDrivenM: 0,           // metres driven while in a car
+  vehiclesEntered: 0,           // car entries (foot -> car edges)
+  highestWanted: 0,             // highest wanted level ever reached 0..5
+  timePlayedSec: 0,             // seconds of live play accumulated
   totalEarned: 0,
   timesBusted: 0,
   timesWasted: 0,
@@ -223,6 +233,8 @@ export function saveGame() {
       taxiFails: G.taxiFails, taxiBestFare: G.taxiBestFare,
       racesWon: G.racesWon, racesDone: G.racesDone,
       raceEarnings: G.raceEarnings, raceBestTimes: G.raceBestTimes,
+      distanceDrivenM: G.distanceDrivenM, vehiclesEntered: G.vehiclesEntered,
+      highestWanted: G.highestWanted, timePlayedSec: G.timePlayedSec,
     }));
   } catch (e) { /* storage may be unavailable; the game still runs */ }
 }
@@ -285,6 +297,17 @@ export function loadGame() {
         }
       }
     }
+    // round 5 career counters: a save written before these fields
+    // existed loads with a clean, empty career — no distance, no
+    // entries, no wanted peak, no played time. Values are clamped
+    // to sane ranges so a damaged save can never put nonsense on
+    // the stats screen.
+    G.distanceDrivenM = (typeof s.distanceDrivenM === 'number' && Number.isFinite(s.distanceDrivenM) && s.distanceDrivenM > 0)
+      ? s.distanceDrivenM : 0;
+    G.vehiclesEntered = Math.max(0, Math.floor(s.vehiclesEntered) || 0);
+    G.highestWanted = clamp(Math.floor(s.highestWanted) || 0, 0, 5);
+    G.timePlayedSec = (typeof s.timePlayedSec === 'number' && Number.isFinite(s.timePlayedSec) && s.timePlayedSec > 0)
+      ? s.timePlayedSec : 0;
     return true;
   } catch (e) { return false; }
 }

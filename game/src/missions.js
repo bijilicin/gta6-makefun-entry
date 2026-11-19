@@ -789,6 +789,7 @@ export class MissionSystem {
         G.stashTaken.push(i);
         G.stashesFound++;
         G.money += 175;
+        G.totalEarned += 175;   // round 5: career cash-earned hook
         setShown(this.stashMeshes[i], false);
         if (fx) fx.pickup();
         events.push({ type: 'toast', text: `HIDDEN STASH ${G.stashesFound}/10 · +$175` });
@@ -828,6 +829,7 @@ export class MissionSystem {
         this.cases.splice(i, 1);
         if (fx) fx.pickup();
         G.money += 25;
+        G.totalEarned += 25;   // round 5: career cash-earned hook
       }
     }
   }

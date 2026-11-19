@@ -113,6 +113,49 @@ this round: checkpoint street races under the Harbor Sprint banner.
   `solmaris-save-v2` save (older saves load with an empty racing
   record). Each grid reopens after a short cooldown.
 
+## Career profile & dispatch (round 5)
+
+A proof-of-depth round lives in `game/src/profile.js`, written for
+this round:
+
+- **Career stats screen** — from the pause menu's **CAREER STATS**
+  button (or the `window.__profile` staging handle): a full-screen
+  "SOLMARIS — CAREER" view over the dimmed city, headed by a big
+  completion percentage and progress bar. The percentage is the mean
+  of six real completion fractions, every one computed from live
+  state at render time — story missions /10, Ledger Pages /30, taxi
+  fares against a 10-fare career goal, street races won /3 courses,
+  the Beach Sprint side job (done once the campaign has passed it),
+  and hidden stashes /10. Beside the checklist, a career counters
+  panel reads the lifetime record: total cash earned
+  (`G.totalEarned`, fed by mission, side-activity, race, stash and
+  fare income), distance driven in km, vehicles entered, times
+  busted, highest wanted level reached, and time played.
+- **New persisted counters** — `distanceDrivenM`, `vehiclesEntered`,
+  `highestWanted` and `timePlayedSec` join the existing
+  `solmaris-save-v2` save in `state.js`, with clean zero defaults so
+  older saves load as an empty career. `profile.js` advances them
+  from the live frame: a counter ticks on each foot-to-car entry
+  edge, distance accrues from the driven car's real speed, the
+  wanted peak follows `G.wanted`, and played time accrues while the
+  game runs unpaused.
+- **Police dispatch panel** — while the wanted level is 1 or more, a
+  HUD card at the top left lists the *actual* response: one row per
+  live unit in the police system's own lists, built a few times a
+  second. Pursuit cars are `PURSUIT` while the PD has eyes on Rina
+  and `SEARCHING` once the wanted state flips to searching (the same
+  flag that flashes the stars), roadblock cars are `ROADBLOCK`, and
+  the helicopter appears only while it is genuinely airborne at
+  five stars — each row with the unit's live distance in metres.
+  The header counts the real units ("SOLMARIS PD — N UNITS") and
+  the panel hides completely at wanted 0. No row is ever invented.
+
+The screenshot set was recomposed around these systems: the cover
+is a wanted-3 chase with the dispatch panel live, the city shot
+pairs a Ledger Page pickup with a waiting taxi fare, the race shot
+keeps the round-4 Harbor Sprint composition, and the fourth shot is
+the career stats screen itself at a staged mid-game record.
+
 ## Run it
 
 Requires Node.js 22+ and a desktop browser.
@@ -135,7 +178,7 @@ MAKEFUN_OUTPUT_DIR=out node main.ts
 
 - `game/index.html` — page shell, HUD and menus
 - `game/src/` — the game's own modules (state, world, vehicles, peds,
-  police, player, missions, hud, audio, nico, particles, activities, races, main)
+  police, player, missions, hud, audio, nico, particles, activities, races, profile, main)
 - `game/vendor/babylon.min.js` — Babylon.js, vendored as a minified library
 - `screenshots/` — real renders of the game at 1280×720
 - `main.ts` — copies the game and screenshots to the output dir and writes

@@ -77,6 +77,36 @@
   #racetitle { font-size: 15px; font-weight: 900; letter-spacing: 1.5px; color: #ffa02a; }
   #raceline { font-size: 16.5px; font-weight: 700; margin-top: 2px; }
   #racemeta { font-size: 13px; opacity: .92; margin-top: 2px; color: #ffe9a8; }
+  #dispatchpanel { position: absolute; top: 178px; left: 18px; width: 302px; background: rgba(8,12,20,.78); border: 1.5px solid rgba(125,180,255,.7); border-left: 4px solid #7db4ff; border-radius: 0 10px 10px 0; padding: 8px 12px 9px; text-shadow: 0 1px 4px #000; }
+  #dispatchtitle { font-size: 13.5px; font-weight: 900; letter-spacing: 1.5px; color: #a9cfff; }
+  .dispatchrow { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 700; margin-top: 3px; }
+  .dispatchlabel { color: #fff; letter-spacing: .5px; min-width: 62px; }
+  .dispatchrole { color: #ffd23e; letter-spacing: 1px; font-size: 11.5px; flex: 1; }
+  .dispatchdist { color: #dfe9f2; opacity: .92; }
+
+  /* ---------- Career stats screen (round 5) ---------- */
+  #statsscreen { position: fixed; inset: 0; z-index: 32; background: rgba(5,8,14,.84); display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
+  #statspanel { width: min(920px, 96vw); max-height: 96vh; overflow: hidden; background: rgba(10,14,22,.92); border: 1.5px solid rgba(255,215,110,.55); border-radius: 16px; padding: 20px 30px 18px; text-align: left; box-shadow: 0 14px 50px rgba(0,0,0,.65); }
+  #statspanel h1 { font-size: 34px; margin: 0; letter-spacing: 4px; font-weight: 900; color: #ffd76e; text-shadow: 0 2px 12px rgba(255,157,77,.35); }
+  #statssub { font-size: 12.5px; letter-spacing: 3px; color: #ffe9c9; opacity: .85; margin-top: 2px; }
+  #statshead { display: flex; align-items: center; gap: 22px; margin-top: 10px; }
+  #statscompletion { font-size: 64px; font-weight: 900; color: #7dff9a; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.7); }
+  #statsbarwrap { flex: 1; }
+  #statsbarlabel { font-size: 12px; letter-spacing: 2.5px; color: #ffe9c9; opacity: .9; margin-bottom: 5px; }
+  #statsbar { height: 14px; background: rgba(255,255,255,.14); border: 1.5px solid rgba(255,255,255,.45); border-radius: 8px; overflow: hidden; }
+  #statsbarfill { height: 100%; width: 0%; background: linear-gradient(90deg,#57cc5e,#b6e34d); transition: width .3s; }
+  #statscols { display: flex; gap: 26px; margin-top: 14px; }
+  #statschecklist { flex: 1.25; }
+  .statsrow { margin-bottom: 9px; }
+  .statsrowlabel { font-size: 14.5px; font-weight: 700; color: #f4f1e8; }
+  .statsrowvalue { float: right; font-size: 14.5px; font-weight: 900; color: #ffd9a0; }
+  .statsrowtrack { clear: both; height: 8px; background: rgba(255,255,255,.12); border-radius: 5px; overflow: hidden; margin-top: 3px; }
+  .statsrowfill { height: 100%; background: linear-gradient(90deg,#ffb347,#ffd23e); }
+  #statscounters { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-content: start; }
+  .statscell { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 8px 12px; }
+  .statscelllabel { font-size: 10.5px; letter-spacing: 2px; color: #ffe9c9; opacity: .85; }
+  .statscellvalue { font-size: 21px; font-weight: 900; color: #fff; margin-top: 1px; }
+  #statshint { margin-top: 12px; font-size: 12.5px; letter-spacing: 1.5px; color: #ffe9c9; opacity: .8; text-align: center; }
 
   /* ---------- Screens ---------- */
   .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
@@ -167,6 +197,10 @@
     <div id="raceline"></div>
     <div id="racemeta"></div>
   </div>
+  <div id="dispatchpanel" class="hidden">
+    <div id="dispatchtitle">SOLMARIS PD — 0 UNITS</div>
+    <div id="dispatchrows"></div>
+  </div>
   <div id="toast"></div>
   <div id="banner"><div id="bannertitle"></div><div id="bannersub"></div></div>
   <div id="radiotoast"></div>
@@ -206,6 +240,7 @@
     <b>R</b> / <b>[ ]</b> radio station &nbsp;•&nbsp; <b>M</b> city map &nbsp;•&nbsp; <b>N</b> mute &nbsp;•&nbsp; <b>P / ESC</b> pause<br>
     <b>T</b> taxi fare — stop at the cyan ring and press T, then beat the clock to the pink marker &nbsp;•&nbsp; Ledger Pages glow gold around the city (30 to find)<br>
     <b>G</b> street race — drive to an orange start ring and press G to enter (fee per race, 3 rivals, best times kept)<br>
+    <b>P</b> pause → <b>CAREER STATS</b> — completion %, career counters and your real record &nbsp;•&nbsp; While wanted, the <b>dispatch panel</b> (top left) lists the actual PD units on you<br>
     Weapon box (top right): magazine / reserve — ammo is finite: <b>R</b> reloads on foot, downed cops &amp; armed peds drop +12, the PAWN shop sells 24 for $50 &nbsp;•&nbsp; Rico's Respray bay clears your heat
   </div>
 </div>
@@ -240,11 +275,34 @@
   <div id="maphint">NORTH IS UP · SCROLL TO ZOOM · M / ESC CLOSES THE MAP · THE GAME PAUSES WHILE YOU READ IT</div>
 </div>
 
+<div id="statsscreen" class="hidden">
+  <div id="statspanel">
+    <h1>SOLMARIS — CAREER</h1>
+    <div id="statssub">RINA VALE · EVERY NUMBER BELOW IS READ FROM HER REAL RECORD</div>
+    <div id="statshead">
+      <div id="statscompletion">0%</div>
+      <div id="statsbarwrap">
+        <div id="statsbarlabel">CAREER COMPLETION</div>
+        <div id="statsbar"><div id="statsbarfill"></div></div>
+      </div>
+    </div>
+    <div id="statscols">
+      <div id="statschecklist"></div>
+      <div id="statscounters"></div>
+    </div>
+    <div class="btnrow" style="justify-content:center">
+      <button class="menu ghost" id="btn-stats-close">CLOSE</button>
+    </div>
+    <div id="statshint">ESC / P RETURNS TO THE PAUSE MENU · THE DISPATCH PANEL (TOP LEFT) LISTS THE REAL PD UNITS ON YOU WHILE WANTED</div>
+  </div>
+</div>
+
 <div id="pausescreen" class="screen hidden">
   <h1 style="font-size:52px">PAUSED</h1>
   <p class="story" id="pausestats">Solmaris waits for no one.</p>
   <div class="btnrow">
     <button class="menu" id="btn-resume">RESUME</button>
+    <button class="menu ghost" id="btn-stats">CAREER STATS</button>
     <button class="menu ghost" id="btn-map">CITY MAP</button>
     <button class="menu ghost" id="btn-save">SAVE GAME</button>
     <button class="menu ghost" id="btn-restart">RESTART STORY</button>
@@ -256,6 +314,7 @@
     <b>R</b> / <b>[ ]</b> radio station &nbsp;•&nbsp; <b>M</b> city map &nbsp;•&nbsp; <b>N</b> mute &nbsp;•&nbsp; <b>P / ESC</b> pause<br>
     <b>T</b> taxi fare — pick up at the cyan ring, drop off at the pink marker before the clock runs out<br>
     <b>G</b> street race — enter at an orange start ring, chase the orange checkpoints, beat 3 rivals<br>
+    <b>CAREER STATS</b> (button above) — completion, cash earned, distance, busts, highest wanted, time played &nbsp;•&nbsp; Dispatch panel lists real PD units while wanted<br>
     Weapon box (top right): magazine / reserve — ammo is finite: <b>R</b> reloads on foot, drops give +12, PAWN shop sells 24 for $50
   </div>
 </div>
@@ -272,6 +331,7 @@
 <script src="./vendor/babylon.min.js"></script>
 <script type="module" src="./src/activities.js"></script>
 <script type="module" src="./src/races.js"></script>
+<script type="module" src="./src/profile.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -26,6 +26,7 @@ import { SoundFX, STATIONS } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import { Activities } from './activities.js';
 import { Races } from './races.js';
+import { ProfileSystem, computeCareerStats } from './profile.js';
 
 const params = new URLSearchParams(window.location.search);
 const shotName = params.get('shot');
@@ -120,6 +121,30 @@ window.__activities = activities;
 // world, traffic and cast exist, driven from the frame loop below.
 const races = new Races(scene, hud, fx);
 window.__races = races;
+// Round 5 career profile (stats screen + police dispatch panel):
+// DOM-and-arithmetic only, driven from the frame loop below. Closing
+// the stats screen returns to the pause menu when the game is paused
+// (its normal entry point); a staging close just hides the screen.
+const profile = new ProfileSystem({
+  onCloseStats: () => { if (G.paused && G.running && !G.over) showScreen('pause'); },
+});
+window.__profile = {
+  system: profile,
+  openStats: () => profile.openStats(),
+  closeStats: () => profile.closeStats(),
+  isOpen: () => profile.isOpen(),
+  compute: () => computeCareerStats(),
+  getSnapshot: () => profile.getSnapshot(),
+  renderDispatch: () => profile.renderDispatch(police, player),
+  stageMidGame: () => {
+    const staged = profile.stageMidGameState();
+    activities.syncPageVisibility();
+    missions.restoreStashes();
+    profile.syncCarEdge(player);
+    profile.renderStats();
+    return staged;
+  },
+};
 
 // ---------------- player headlight (lighting adaptation) ----------------
 // One wide SpotLight (created above, right after the world), re-aimed
@@ -145,7 +170,7 @@ function updateHeadlight() {
 // same way ?shot= staging moves the game. It changes nothing in play.
 window.__lighting = {
   pool: world.lightPool, lampHeads: world.lampHeads, headlight,
-  lampScale, G, player, world, scene, cars: allCars, police, missions, activities, races,
+  lampScale, G, player, world, scene, cars: allCars, police, missions, activities, races, profile,
   saveGame, loadGame, peds,
   setClockMinutes(mins) { G.clockMinutes = mins; },
 };
@@ -201,6 +226,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyG' && G.running && !G.paused && !hud.fullMapOpen) races.handleGKey(player);
   if (e.code === 'KeyM' && G.running && !G.over) { toggleMap(); return; }
   if ((e.code === 'KeyP' || e.code === 'Escape') && G.running) {
+    if (profile.isOpen()) { profile.closeStats(); return; }
     if (hud.fullMapOpen) { toggleMap(false); return; }
     togglePause();
   }
@@ -415,6 +441,7 @@ function startGame(fresh) {
     missions.resetCampaign();
     activities.resetAll();
     races.resetAll();
+    profile.resetCareer();
   } else {
     missions.restoreStashes();
     activities.restoreFromSave();
@@ -478,6 +505,7 @@ function endRun(kind) {
 document.getElementById('btn-new').addEventListener('click', () => startGame(true));
 document.getElementById('btn-continue').addEventListener('click', () => startGame(false));
 document.getElementById('btn-resume').addEventListener('click', togglePause);
+document.getElementById('btn-stats').addEventListener('click', () => { showScreen(null); profile.openStats(); });
 document.getElementById('btn-map').addEventListener('click', () => toggleMap(true));
 document.getElementById('btn-save').addEventListener('click', () => { saveGame(); hud.toast('GAME SAVED', 1.6); });
 document.getElementById('btn-restart').addEventListener('click', () => { G.paused = false; startGame(true); });
@@ -846,6 +874,11 @@ function frame(now) {
   // race clock and fail states advance — grids only form in free roam
   races.update(dt, player, { canOffer: !missions.active });
 
+  // round 5 career profile: counter bookkeeping (car entries, driven
+  // distance, wanted peak, played time) plus the dispatch panel and
+  // an open stats screen, refreshed a few times a second
+  profile.update(dt, player, police);
+
   // finale sunset: the light itself plays the last stage
   {
     const target = missions.sunsetActive() ? 1 : 0;
@@ -922,6 +955,20 @@ function stageShot(name) {
     if (peds[1]) { peds[1].pos.set(-47, 0, -19.5); peds[1].heading = -Math.PI / 2; }
     if (peds[2]) { peds[2].pos.set(-42, 0, -30.5); peds[2].heading = Math.PI / 2; }
     missions.startNext(fx);
+    // taxi activity in frame (round 5 recomposition): a fare is
+    // waiting at the kerb beside Rina — passenger figure, cyan ring
+    // and the taxi panel all live, staged through the real spawn
+    // path and then walked to its screenshot mark
+    try {
+      if (activities.spawnFare(player, true) && activities.taxi.passenger) {
+        const pax = activities.taxi.passenger;
+        pax.x = -40.6; pax.z = -25.8;
+        if (pax.mesh) pax.mesh.position.set(pax.x, 0, pax.z);
+        if (pax.ring) pax.ring.position.set(pax.x, 0.35, pax.z);
+        if (pax.halo) pax.halo.position.set(pax.x, 2.6, pax.z);
+        activities.renderWaitingPanel(player);
+      }
+    } catch (e) { /* the city shot stands without the fare */ }
     camYaw = Math.PI;
     camera.position.set(-44, 3.6, -12.5);
     camLookAt(-44, 1.3, -28);
@@ -1028,6 +1075,25 @@ function stageShot(name) {
     camLookAt(16, 1.2, 121.5);
     return;
   }
+  if (name === 'stats') {
+    // Round 5: the career stats screen over a dimmed downtown street,
+    // at the staged believable mid-game state — every number on the
+    // screen is computed from these state fields by profile.js.
+    player.placeAt(-38, -24, Math.PI * 0.75);
+    const car = parkedCars[5] || allCars[5];
+    if (car) {
+      car.pos.set(-33.5, 0, -18.5); car.heading = Math.PI / 4;
+      car.mesh.rotation.y = Math.PI / 4;
+    }
+    if (peds[0]) { peds[0].pos.set(-35, 0, -29); peds[0].heading = Math.PI / 2; }
+    if (peds[1]) { peds[1].pos.set(-42, 0, -19); peds[1].heading = -Math.PI / 2; }
+    window.__profile.stageMidGame();
+    profile.openStats();
+    camYaw = Math.PI * 0.75 + Math.PI;
+    camera.position.set(-48, 4.2, -34);
+    camLookAt(-30, 1.4, -16);
+    return;
+  }
   // chase: wanted 3, PD on her tail with lightbars flashing, mission live
   G.money = 1180; G.displayedMoney = 1180; G.missionIndex = 3; G.hasGun = true; G.ammoMag = G.magSize; G.ammoReserve = 48; G.reloading = 0;
   const car = parkedCars[4] || allCars[1];
@@ -1047,6 +1113,10 @@ function stageShot(name) {
     u.heading = 0; u.mesh.rotation.y = 0;
     u.speed = 16;
   }
+  // round 5 cover composition: the dispatch panel lists exactly
+  // these units (the settle loop keeps its distances live)
+  profile.syncCarEdge(player);
+  profile.renderDispatch(police, player);
   camYaw = 0;
   camera.position.set(43.8, 5.4, -95);
   camLookAt(43.8, 1.7, -63);
@@ -1080,6 +1150,7 @@ if (shotName) {
     missions.update(0.001, player, null, []);
     activities.update(0.016, player, { canOffer: false });
     races.update(0.016, player, { canOffer: false });
+    profile.update(0.016, player, police);
     hud.update(0.016, missions.hudState(), player, allCars, peds, police.units, missions.active ? missions.stageTarget() : LANDMARKS.cafe);
     activities.drawMinimapBlips(player, hud);
     races.drawMinimapBlips(player, hud);
